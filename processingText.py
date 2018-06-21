@@ -65,7 +65,7 @@ def build_dataset(words):
 
 
 # given a word build return the one hot label
-def getWordLabel(words, index):
+def getWordLabel(word):
     global vocabularyLength
     global identityMatrix;
     global dictionary;
