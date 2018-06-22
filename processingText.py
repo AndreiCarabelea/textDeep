@@ -14,6 +14,7 @@ from sklearn.manifold import TSNE
 url = 'http://mattmahoney.net/dc/'
 vocabularyLength = 5000;
 identityMatrix = np.eye(vocabularyLength + 1);
+maxIterations = 1000;
 
 #we eill use an embedding of 100 features
 numFeatures = 100;
@@ -78,14 +79,50 @@ def getWordLabel(word):
     result.shape = (1, vocabularyLength + 1);
     return result;
 
+def getLabelWord(label):
+    index = np.argmax(label)
+    if index < vocabularyLength:
+        return reverse_dictionary[index];
+    return "."
+
 
 # the file contains a text file with phrases.
 filename = maybe_download('text8.zip', 31344016)
 words = read_data(filename)
+totalNumberOfWords = (float)(len(set(words)))
 print('Data size %d' % len(words))
 dictionary, reverse_dictionary = build_dataset(words)
 graph = tf.Graph()
 
+words = [word for word in words if word in dictionary or random.random() < (float)(vocabularyLength * 0.5)/(totalNumberOfWords  - vocabularyLength)]
+
+
+def softmax(x):
+    return  np.exp(x) / np.sum(np.exp(x),axis = 0);
+
+#train dataset has windowSize * 2
+# it is a list of words
+def model(weights1, biases1, weights2, biases2, train_dataset):
+
+    train_dataset = train_dataset.split();
+    assert(len(train_dataset) == 2 * windowSize);
+    batch_data = np.ndarray(dtype=np.float32, shape=(0, vocabularyLength + 1));
+    for word in train_dataset:
+        batch_data = np.append(batch_data, getWordLabel(word))
+
+    batch_data = batch_data.reshape((2 * windowSize, vocabularyLength + 1))
+
+    y1 = batch_data @ weights1 + biases1
+    y1_reduced = np.mean(y1, 0)
+    y1_reduced = np.reshape(y1_reduced, (1, y1_reduced.shape[0]))
+    y2 = y1_reduced @ weights2 + biases2;
+
+    #skip softmax
+
+    return getLabelWord(y2);
+
+
+#This is cbow
 with graph.as_default():
     # Input data.
     # Load the training, validation and test data into constants that are
@@ -115,32 +152,81 @@ with graph.as_default():
 
     y2 = tf.matmul(y1_reduced, weights2) + biases2;
 
-    loss = tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_label, logits=y2);
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_label, logits=y2));
     optimizer = tf.train.AdamOptimizer(0.01).minimize(loss);
     tf_train_prediction = tf.nn.softmax(y2);
 
 with tf.Session(graph=graph) as session:
      tf.global_variables_initializer().run();
-     for i in range(len(words)):
-         batch_label = getWordLabel(batchWords[index1])
-         batchWords = words[i:i+windowSize]
-         for index1 in range(windowSize):
+     for i in range(0, min(len(words), maxIterations) ,windowSize):
+         batch_label = getWordLabel(words[i])
+         batch_data = np.ndarray(dtype=np.float32, shape=(0, vocabularyLength + 1));
+         for index1 in [index2 for index2 in range(i - windowSize, i + windowSize + 1) if index2 != i]:
+             if index1 < len(words) and index1 >= 0:
+                 batch_data = np.append(batch_data, getWordLabel(words[index1]))
+             else:
+                 batch_data = np.append(batch_data, batch_label)
 
-             batch_data = np.ndarray(dtype=np.float32, shape=(0, vocabularyLength + 1));
+         batch_data = batch_data.reshape((2 * windowSize ,vocabularyLength + 1))
+         fd = {tf_train_dataset: batch_data, tf_train_label: batch_label}
+         _, returnedLoss, predictions = session.run([optimizer, loss, tf_train_prediction], feed_dict=fd);
+         print("iteration " + str(i) + "/" + str(len(words)) + ", loss: " + str(returnedLoss));
 
-             for index2 in range(windowSize):
-                 if index2 != index1:
-                     batch_data = np.append(batch_data, getWordLabel(words[index2]))
-
-             batch_data = batch_data.reshape((windowSize-1 ,vocabularyLength + 1))
-
-
-             fd = {tf_train_dataset: batch_data, tf_train_label: batch_label}
-
-             _, l, predictions = session.run([optimizer, loss, tf_train_prediction], feed_dict=fd);
-
-             print("session run finished")
-
+     # if the results are not returned by session.run, they can be evalua
+     print(model(weights1.eval(), biases1.eval(), weights2.eval(), biases2.eval(), "I feel bad today "))
+     print(model(weights1.eval(), biases1.eval(), weights2.eval(), biases2.eval(), "you went mountain winter"))
+     print(model(weights1.eval(), biases1.eval(), weights2.eval(), biases2.eval(), "king power land queen"))
 
 
+#This is skip-gram
+with graph.as_default():
+    # Input data.
+    # Load the training, validation and test data into constants that are
+    # attached to the graph.
 
+    tf_train_dataset = tf.placeholder(tf.float32, shape=(1, vocabularyLength + 1));
+    tf_train_labels = tf.placeholder(tf.float32, shape=(2 * windowSize, vocabularyLength + 1));
+
+
+    # Variables.
+    # These are the parameters that we are going to be training. The weight
+    # matrix will be initialized using random values following a (truncated)
+    # normal distribution. The biases get initialized to zero.
+    weights1 = tf.Variable(tf.truncated_normal([vocabularyLength + 1, numFeatures]))
+    weights2 = tf.Variable(tf.truncated_normal([numFeatures, vocabularyLength + 1]))
+    biases1  = tf.Variable(tf.truncated_normal([ numFeatures]))
+    biases2  = tf.Variable((tf.truncated_normal([ vocabularyLength + 1])))
+
+    # Training computation.
+    # We multiply the inputs with the weight matrix, and add biases. We compute
+    # the softmax and cross-entropy (it's one operation in TensorFlow, because
+    # it's very common, and it can be optimized). We take the average of this
+    # cross-entropy across all training examples: that's our loss.
+    y1 = tf.matmul(tf_train_dataset, weights1) + biases1
+    y2 = tf.matmul(y1, weights2) + biases2;
+    y2rep = tf.ones([2 * windowSize, 1]) *  y2;
+
+    loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=y2rep));
+    optimizer = tf.train.AdamOptimizer(0.01).minimize(loss);
+    tf_train_prediction = tf.nn.softmax(y2);
+
+with tf.Session(graph=graph) as session:
+     tf.global_variables_initializer().run();
+     for i in range(0, min(len(words), maxIterations) ,windowSize):
+         batch_data = getWordLabel(words[i])
+         batch_labels = np.ndarray(dtype=np.float32, shape=(0, vocabularyLength + 1));
+         for index1 in [index2 for index2 in range(i - windowSize, i + windowSize + 1) if index2 != i]:
+             if index1 < len(words) and index1 >= 0:
+                 batch_labels = np.append(batch_labels, getWordLabel(words[index1]))
+             else:
+                 batch_labels = np.append(batch_labels, batch_data)
+
+         batch_labels = batch_labels.reshape((2 * windowSize ,vocabularyLength + 1))
+         fd = {tf_train_dataset: batch_data, tf_train_labels: batch_labels}
+         _, returnedLoss, predictions = session.run([optimizer, loss, tf_train_prediction], feed_dict=fd);
+         print("iteration " + str(i) + "/" + str(len(words)) + ", loss: " + str(returnedLoss));
+
+     # if the results are not returned by session.run, they can be evalua
+     # print(model(weights1.eval(), biases1.eval(), weights2.eval(), biases2.eval(), "I feel bad today "))
+     # print(model(weights1.eval(), biases1.eval(), weights2.eval(), biases2.eval(), "you went mountain winter"))
+     # print(model(weights1.eval(), biases1.eval(), weights2.eval(), biases2.eval(), "king power land queen"))
