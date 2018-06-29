@@ -62,40 +62,55 @@ def build_dataset(words):
 
 # the file contains a text file with phrases.
 filename = maybe_download('text8.zip', 31344016)
-words = read_data(filename)
+# words = read_data(filename)
+words = open('data.txt', 'r').read().split();
+
 print('Data size %d' % len(words))
 
 words = [word for word in words if len(word) > 3]
 dictionary, reverse_dictionary = build_dataset(words)
-numberOfWords = len(words);
+words = [word for word in words if word in dictionary]
+maxSamples = 50;
+numberOfWords = len(words)
+
 
 graph = tf.Graph()
 
-weights1, biases1, weights2, biases2 = learningAlgorithms.trainCbow(graph,words,dictionary)
 
-maxTestWord = 0;
-while True:
+weights1, biases1, _, _ = learningAlgorithms.trainCbow(graph, words, dictionary)
+
+for i in range(maxSamples):
     i = random.randint(0, numberOfWords - 1)
-    if len(words[i]) < 4 or not words[i] in dictionary:
-        continue;
-    maxTestWord += 1
-
-    print(words[i] + "[cbow]" + learningAlgorithms.modelCbow(weights1, biases1, weights2, biases2, words[i],dictionary, reverse_dictionary))
-
-    if maxTestWord > 10:
-        break
+    print(learningAlgorithms.getNsimilarWords(words[i], weights1, biases1, dictionary, 10))
 
 
-weights1, biases1, weights2, biases2 = learningAlgorithms.trainSkipGram(graph,words,dictionary)
+# maxTestWord = 0;
+# while True:
+#     i = random.randint(0, numberOfWords - 1)
+#     if len(words[i]) < 4 or not words[i] in dictionary:
+#         continue;
+#     maxTestWord += 1
+#
+#     print(words[i] + "[cbow]" + learningAlgorithms.modelCbow(weights1, biases1, weights2, biases2, words[i],dictionary, reverse_dictionary))
+#
+#     if maxTestWord > 10:
+#         break
 
-maxTestWord = 0;
-while True:
 
+weights1, biases1, _, _ = learningAlgorithms.trainSkipGram(graph,words,dictionary)
+
+for i in range(maxSamples):
     i = random.randint(0, numberOfWords - 1)
-    if len(words[i]) < 4 or not words[i] in dictionary:
-        continue;
-    maxTestWord += 1
-    print(words[i] + "[skipgram]" + str(learningAlgorithms.modelSkipGram(weights1.eval(), biases1.eval(), weights2.eval(), biases2.eval(), words[i], dictionary, reverse_dictionary)))
+    print(learningAlgorithms.getNsimilarWords(words[i], weights1, biases1, dictionary, 10))
 
-    if maxTestWord > 10:
-        break
+# maxTestWord = 0;
+# while True:
+#
+#     i = random.randint(0, numberOfWords - 1)
+#     if len(words[i]) < 4 or not words[i] in dictionary:
+#         continue;
+#     maxTestWord += 1
+#     print(words[i] + "[skipgram]" + str(learningAlgorithms.modelSkipGram(weights1.eval(), biases1.eval(), weights2.eval(), biases2.eval(), words[i], dictionary, reverse_dictionary)))
+#
+#     if maxTestWord > 10:
+#         break

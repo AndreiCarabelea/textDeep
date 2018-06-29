@@ -2,28 +2,51 @@ import numpy as np
 import tensorflow as tf;
 import random
 
-vocabularyLength = 2000;
+from sklearn.metrics.pairwise import cosine_similarity
+
+vocabularyLength = 100;
 identityMatrix = np.eye(vocabularyLength);
 numFeatures = 100;
-windowSize = 5;
-maxIterations = vocabularyLength * 50;
+windowSize = 6;
+maxIterations = vocabularyLength * 10;
 
 
-def getWordLabel(word, dictionary, targetWord=""):
+def getWordLabel(word, dictionary):
     global vocabularyLength
     global identityMatrix;
 
-    if word in dictionary:
-        result =  identityMatrix[dictionary[word]];
-    elif len(targetWord) > 1:
-        assert(targetWord in dictionary);
-        result = identityMatrix[dictionary[targetWord]];
-    else:
-        #default the most common word label is returned, if the word is not in dictionary
-        result = identityMatrix[0];
-
+    result = identityMatrix[dictionary[word]];
     result.shape = (1, vocabularyLength);
+
     return result;
+
+
+def similarity(word1, word2, weights1, biases1, dictionary):
+    inputLabel1 = getWordLabel(word1, dictionary)
+    #word embedding
+    y1 = inputLabel1 @ weights1 + biases1
+
+    inputLabel2 = getWordLabel(word2, dictionary)
+    # word embedding
+    y2 = inputLabel2 @ weights1 + biases1
+
+
+    res = np.mean(cosine_similarity(y1, y2))
+
+    return res
+
+
+def getNsimilarWords(word, weights1, biases1, dictionary, N):
+    words =  [*dictionary]
+    similarity_dataset= list(map((lambda x: similarity(x, word, weights1, biases1, dictionary)), words))
+    similarity_Indexes = np.argsort(similarity_dataset);
+
+    results = []
+    for i in range(0,N):
+        results.append(words[similarity_Indexes[i]])
+
+    return word + "/////" + str(results);
+
 
 
 def trainCbow(graph, words, dictionary):
@@ -55,17 +78,15 @@ def trainCbow(graph, words, dictionary):
          tf.global_variables_initializer().run();
 
 
-         for index in range(0, min(numberOfWords, maxIterations)):
+         for index in range(0,  maxIterations):
 
              i = random.randint(0, numberOfWords - 1)
-             if len(words[i]) < 4 or not words[i] in dictionary:
-                 continue;
 
              batch_label = getWordLabel(words[i], dictionary)
              batch_data = np.ndarray(dtype=np.float32, shape=(0, vocabularyLength));
              for index1 in [index2 for index2 in range(i - windowSize, i + windowSize + 1) if index2 != i]:
                  if index1 < len(words) and index1 >= 0:
-                     batch_data = np.append(batch_data, getWordLabel(words[index1], dictionary, words[i]))
+                     batch_data = np.append(batch_data, getWordLabel(words[index1], dictionary))
                  else:
                      batch_data = np.append(batch_data, batch_label)
 
@@ -96,24 +117,23 @@ def trainSkipGram(graph, words, dictionary):
         y2 = tf.matmul(y1, weights2) + biases2;
         y2rep = tf.ones([2 * windowSize, 1]) *  y2;
 
-        loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=y2rep));
+        # loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=tf_train_labels, logits=y2rep));
+        loss = tf.reduce_mean((y2rep - tf_train_labels)**2);
         optimizer = tf.train.AdamOptimizer(0.01).minimize(loss);
         tf_train_prediction = tf.nn.softmax(y2);
 
     with tf.Session(graph=graph) as session:
 
          tf.global_variables_initializer().run();
-         for index in range(0, min(numberOfWords, maxIterations)):
+         for index in range(0, maxIterations):
 
              i = random.randint(0, numberOfWords - 1)
-             if len(words[i]) < 4 or not words[i] in dictionary:
-                 continue;
 
              batch_data = getWordLabel(words[i], dictionary)
              batch_labels = np.ndarray(dtype=np.float32, shape=(0, vocabularyLength));
              for index1 in [index2 for index2 in range(i - windowSize, i + windowSize + 1) if index2 != i]:
                  if index1 < len(words) and index1 >= 0:
-                     batch_labels = np.append(batch_labels, getWordLabel(words[index1], dictionary, words[i]))
+                     batch_labels = np.append(batch_labels, getWordLabel(words[index1], dictionary))
                  else:
                      batch_labels = np.append(batch_labels, batch_data)
 
@@ -124,6 +144,7 @@ def trainSkipGram(graph, words, dictionary):
                 print("iteration " + str(index) + "/" + str(maxIterations) + ", loss: " + str(returnedLoss));
          return   weights1.eval(), biases1.eval(), weights2.eval(), biases2.eval()
 
+#these functions use the output of the network to deduct the most similar words, not quite correct
 def modelCbow(weights1, biases1, weights2, biases2, train_dataset, dictionary, reverse_dictionary):
 
     train_dataset = train_dataset.split();
