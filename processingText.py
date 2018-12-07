@@ -61,8 +61,10 @@ def build_dataset(words):
 #    return reverse_dictionary(np.argmax(label))
 
 # the file contains a text file with phrases.
-filename = maybe_download('text8.zip', 31344016)
+# filename = maybe_download('text8.zip', 31344016)
 # words = read_data(filename)
+
+print("Hellosdsdssd")
 words = open('data.txt', 'r').read().split();
 
 print('Data size %d' % len(words))
@@ -77,40 +79,10 @@ numberOfWords = len(words)
 graph = tf.Graph()
 
 
-weights1, biases1, _, _ = learningAlgorithms.trainCbow(graph, words, dictionary)
+weights1, biases1, _, _ = learningAlgorithms.trainCbow(graph, words, dictionary, 20)
 
 for i in range(maxSamples):
     i = random.randint(0, numberOfWords - 1)
     print(learningAlgorithms.getNsimilarWords(words[i], weights1, biases1, dictionary, 10))
 
 
-# maxTestWord = 0;
-# while True:
-#     i = random.randint(0, numberOfWords - 1)
-#     if len(words[i]) < 4 or not words[i] in dictionary:
-#         continue;
-#     maxTestWord += 1
-#
-#     print(words[i] + "[cbow]" + learningAlgorithms.modelCbow(weights1, biases1, weights2, biases2, words[i],dictionary, reverse_dictionary))
-#
-#     if maxTestWord > 10:
-#         break
-
-
-weights1, biases1, _, _ = learningAlgorithms.trainSkipGram(graph,words,dictionary)
-
-for i in range(maxSamples):
-    i = random.randint(0, numberOfWords - 1)
-    print(learningAlgorithms.getNsimilarWords(words[i], weights1, biases1, dictionary, 10))
-
-# maxTestWord = 0;
-# while True:
-#
-#     i = random.randint(0, numberOfWords - 1)
-#     if len(words[i]) < 4 or not words[i] in dictionary:
-#         continue;
-#     maxTestWord += 1
-#     print(words[i] + "[skipgram]" + str(learningAlgorithms.modelSkipGram(weights1.eval(), biases1.eval(), weights2.eval(), biases2.eval(), words[i], dictionary, reverse_dictionary)))
-#
-#     if maxTestWord > 10:
-#         break
